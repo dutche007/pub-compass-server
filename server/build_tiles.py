@@ -20,6 +20,7 @@ from shapely.geometry import shape
 EARTH_RADIUS_M = 6_371_008.8
 MAX_TILE_PUBS = 40
 MAX_EMPTY_DISTANCE_M = 30_000.0
+INDEX_PREFIX_DEPTH = 3
 WARN_SITE_SIZE = 500_000_000
 MAX_SITE_SIZE = 1_000_000_000
 UK_BOUNDS = (-8.7, 49.8, 2.2, 60.9)
@@ -173,6 +174,18 @@ class TileBuilder:
         mid_lat = (min_lat + max_lat) / 2.0
         return (2 if latitude >= mid_lat else 0) | (1 if longitude >= mid_lon else 0)
 
+    @classmethod
+    def prefix_path(cls, latitude: float, longitude: float, depth: int = INDEX_PREFIX_DEPTH) -> str:
+        min_lon = math.floor(longitude)
+        min_lat = math.floor(latitude)
+        bounds = (float(min_lon), float(min_lat), float(min_lon + 1), float(min_lat + 1))
+        path = ""
+        for _ in range(depth):
+            child = cls.child_index(latitude, longitude, bounds)
+            bounds = cls.child_bounds(bounds, child)
+            path += str(child)
+        return path
+
     @staticmethod
     def child_bounds(bounds: tuple[float, float, float, float], child: int) -> tuple[float, float, float, float]:
         min_lon, min_lat, max_lon, max_lat = bounds
@@ -225,7 +238,7 @@ class TileBuilder:
         candidates = self._candidates(bounds)
         if candidates is None:
             return
-        if len(candidates) > self.max_tile_pubs:
+        if len(candidates) > self.max_tile_pubs or depth < INDEX_PREFIX_DEPTH:
             if depth >= self.max_depth:
                 raise ValueError(
                     f"Tile {root}/{path or 'root'} still has {len(candidates)} pubs "
@@ -254,14 +267,7 @@ class TileBuilder:
         tiles_dir.mkdir(exist_ok=True)
         index_dir.mkdir(exist_ok=True)
 
-        all_roots = set(self._split_paths)
-        all_roots.update(key.split("/", 1)[0] for key in self._leaf_pubs)
-        for root in all_roots:
-            split_paths = self._split_paths.get(root, [])
-            path = index_dir / f"{root}.json"
-            payload = json.dumps({"v": 1, "s": sorted(split_paths)}, separators=(",", ":"))
-            path.write_text(payload, encoding="utf-8")
-            self.index_count += 1
+        self._write_indexes(index_dir)
 
         for key, indices in self._leaf_pubs.items():
             root, path = key.split("/", 1)
@@ -279,17 +285,28 @@ class TileBuilder:
             self.total_tile_size += len(encoded)
             self.largest_tile_size = max(self.largest_tile_size, len(encoded))
 
-        self._write_index_files(index_dir)
         self._write_site_index()
         self.validate_random_points()
 
-    def _write_index_files(self, index_dir: Path) -> None:
-        for root in self._leaf_pubs:
-            root_key = root.split("/", 1)[0]
-            if root_key in self._split_paths:
-                continue
-            path = index_dir / f"{root_key}.json"
-            path.write_text(json.dumps({"v": 1, "s": []}, separators=(",", ":")), encoding="utf-8")
+    def _write_indexes(self, index_dir: Path) -> None:
+        index_groups: dict[tuple[str, str], set[str]] = defaultdict(set)
+        for key in self._leaf_pubs:
+            root, path = key.split("/", 1)
+            if len(path) >= INDEX_PREFIX_DEPTH:
+                index_groups[(root, path[:INDEX_PREFIX_DEPTH])]
+
+        for root, paths in self._split_paths.items():
+            for path in paths:
+                if len(path) >= INDEX_PREFIX_DEPTH:
+                    index_groups[(root, path[:INDEX_PREFIX_DEPTH])].add(
+                        path[INDEX_PREFIX_DEPTH:]
+                    )
+
+        for (root, prefix), split_paths in index_groups.items():
+            path = index_dir / root / f"{prefix}.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            payload = json.dumps({"v": 1, "s": sorted(split_paths)}, separators=(",", ":"))
+            path.write_text(payload, encoding="utf-8")
             self.index_count += 1
 
     def _leaf_for(self, latitude: float, longitude: float) -> list[int] | None:

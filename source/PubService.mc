@@ -17,6 +17,8 @@ class PubService {
     private var _longitude as Float = 0.0;
     private var _rootKey as String = "";
     private var _indexRoot as String?;
+    private var _indexPrefixPath as String?;
+    private var _prefixPath as String = "";
     private var _splitPaths as Array<String> = [];
     private var _lastRequestKey as String = "";
     private var _done as Method?;
@@ -90,12 +92,13 @@ class PubService {
         _latitude = latitude;
         _longitude = longitude;
         _rootKey = getRootKey(latitude, longitude);
+        _prefixPath = getIndexPrefixPath(latitude, longitude);
         _phoneRetryCount = 0;
         _waitingForPhone = false;
         _done = callback;
         _busy = true;
 
-        if (_indexRoot != _rootKey) {
+        if (_indexRoot != _rootKey || _indexPrefixPath != _prefixPath) {
             requestIndex();
         } else {
             requestTile();
@@ -119,7 +122,8 @@ class PubService {
 
     public function getTileKey(latitude as Float, longitude as Float) as String? {
         var root = getRootKey(latitude, longitude);
-        if (_indexRoot == null || _indexRoot != root) {
+        if (_indexRoot == null || _indexRoot != root ||
+            _indexPrefixPath != getIndexPrefixPath(latitude, longitude)) {
             return null;
         }
         var path = resolvePath(latitude, longitude);
@@ -130,6 +134,34 @@ class PubService {
         var latDegree = Math.floor(latitude) as Number;
         var lonDegree = Math.floor(longitude) as Number;
         return latDegree.toString() + "_" + lonDegree.toString();
+    }
+
+    public static function getIndexPrefixPath(latitude as Float, longitude as Float) as String {
+        var minLatitude = Math.floor(latitude) as Float;
+        var minLongitude = Math.floor(longitude) as Float;
+        var maxLatitude = minLatitude + 1.0;
+        var maxLongitude = minLongitude + 1.0;
+        var prefix = "";
+
+        for (var depth = 0; depth < 3; depth++) {
+            var middleLatitude = (minLatitude + maxLatitude) / 2.0;
+            var middleLongitude = (minLongitude + maxLongitude) / 2.0;
+            var child = 0;
+            if (latitude >= middleLatitude) {
+                child += 2;
+                minLatitude = middleLatitude;
+            } else {
+                maxLatitude = middleLatitude;
+            }
+            if (longitude >= middleLongitude) {
+                child += 1;
+                minLongitude = middleLongitude;
+            } else {
+                maxLongitude = middleLongitude;
+            }
+            prefix += child.toString();
+        }
+        return prefix;
     }
 
     public static function getErrorTitle(error as Number) as String {
@@ -174,7 +206,7 @@ class PubService {
 
     private function requestIndex() as Void {
         _loadingIndex = true;
-        _lastRequestKey = "index/" + _rootKey + ".json";
+        _lastRequestKey = "index/" + _rootKey + "/" + _prefixPath + ".json";
         requestUrl(PAGES_BASE_URL + _lastRequestKey);
     }
 
@@ -207,7 +239,7 @@ class PubService {
         }
 
         if (responseCode == 404) {
-            System.println("Pub tile empty: " + _lastRequestKey + " HTTP 404");
+            System.println("Pub map empty: " + _lastRequestKey + " HTTP 404");
             finish([], RESULT_NO_PUBS);
             return;
         }
@@ -226,6 +258,7 @@ class PubService {
                 return;
             }
             _indexRoot = _rootKey;
+            _indexPrefixPath = _prefixPath;
             requestTile();
             return;
         }
@@ -264,13 +297,38 @@ class PubService {
         var maxLatitude = minLatitude + 1.0;
         var maxLongitude = minLongitude + 1.0;
         var path = "";
+        for (var prefixIndex = 0; prefixIndex < _prefixPath.length(); prefixIndex++) {
+            var prefixDigit = _prefixPath.substring(prefixIndex, prefixIndex + 1) as String;
+            var prefixChild = 0;
+            if (prefixDigit == "1") {
+                prefixChild = 1;
+            } else if (prefixDigit == "2") {
+                prefixChild = 2;
+            } else if (prefixDigit == "3") {
+                prefixChild = 3;
+            }
+            var prefixMiddleLatitude = (minLatitude + maxLatitude) / 2.0;
+            var prefixMiddleLongitude = (minLongitude + maxLongitude) / 2.0;
+            if (prefixChild >= 2) {
+                minLatitude = prefixMiddleLatitude;
+            } else {
+                maxLatitude = prefixMiddleLatitude;
+            }
+            if (prefixChild % 2 == 1) {
+                minLongitude = prefixMiddleLongitude;
+            } else {
+                maxLongitude = prefixMiddleLongitude;
+            }
+            path += prefixChild.toString();
+        }
         var searching = true;
         var depth = 0;
 
         while (searching && depth < 20) {
             var isSplit = false;
+            var suffix = path.substring(_prefixPath.length(), path.length()) as String;
             for (var index = 0; index < _splitPaths.size(); index++) {
-                if (_splitPaths[index] == path) {
+                if (_splitPaths[index] == suffix) {
                     isSplit = true;
                     break;
                 }

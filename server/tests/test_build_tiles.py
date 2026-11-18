@@ -92,12 +92,41 @@ class TileBuilderTests(unittest.TestCase):
                 spot_checks=(),
             )
             builder.build()
-            index = json.loads((output / "index" / "52_1.json").read_text(encoding="utf-8"))
-            tile = json.loads((output / "tiles" / "52_1" / "root.json").read_text(encoding="utf-8"))
+            prefix = builder.prefix_path(52.05, 1.15)
+            index_path = output / "index" / "52_1" / f"{prefix}.json"
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+            tile = json.loads((output / "tiles" / "52_1" / f"p{prefix}.json").read_text(encoding="utf-8"))
             self.assertEqual(index, {"v": 1, "s": []})
             self.assertEqual(tile["v"], 1)
             self.assertEqual(tile["built"], "2026-11-18")
             self.assertEqual(len(tile["p"]), 12)
+            self.assertLess(index_path.stat().st_size, 100)
+
+    def test_dense_cell_index_contains_only_relative_splits(self):
+        pubs = [
+            {"id": f"node/{i}", "name": f"Pub {i}", "lat": 52.05 + i * 0.00002, "lon": 1.15, "hours": None}
+            for i in range(12)
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            builder = TileBuilder(
+                pubs,
+                output,
+                "2026-11-18",
+                validation_points=0,
+                validation_bounds=(1.14, 52.04, 1.16, 52.07),
+                spot_checks=(),
+            )
+            prefix = builder.prefix_path(52.05, 1.15)
+            builder._leaf_pubs = {f"52_1/{prefix}": list(range(len(pubs)))}
+            builder._split_paths["52_1"] = ["", "0", prefix, prefix + "2", prefix + "23"]
+            index_dir = output / "index"
+            index_dir.mkdir()
+            builder._write_indexes(index_dir)
+            index_path = output / "index" / "52_1" / f"{prefix}.json"
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+            self.assertEqual(index["s"], ["", "2", "23"])
+            self.assertLess(index_path.stat().st_size, 2000)
 
 
 if __name__ == "__main__":

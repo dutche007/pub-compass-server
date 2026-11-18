@@ -18,6 +18,7 @@ class PubCompassApp extends Application.AppBase {
     private var _pendingFetchLatitude as Float = 0.0;
     private var _pendingFetchLongitude as Float = 0.0;
     private var _lastFetchRootKey as String?;
+    private var _lastFetchPrefixPath as String?;
     private var _lastFetchTileKey as String?;
     private var _heading as Float? = null;
     private var _targetIndex as Number = 0;
@@ -250,6 +251,7 @@ class PubCompassApp extends Application.AppBase {
             _arrived = false;
             _service.saveCache(_pubs, _pendingFetchLatitude, _pendingFetchLongitude);
             _lastFetchRootKey = PubService.getRootKey(_pendingFetchLatitude, _pendingFetchLongitude);
+            _lastFetchPrefixPath = PubService.getIndexPrefixPath(_pendingFetchLatitude, _pendingFetchLongitude);
             _lastFetchTileKey = _service.getTileKey(_pendingFetchLatitude, _pendingFetchLongitude);
         } else if (result == PubService.RESULT_NO_PUBS) {
             _offline = false;
@@ -258,12 +260,14 @@ class PubCompassApp extends Application.AppBase {
             _targetIndex = 0;
             _arrived = false;
             _lastFetchRootKey = PubService.getRootKey(_pendingFetchLatitude, _pendingFetchLongitude);
+            _lastFetchPrefixPath = PubService.getIndexPrefixPath(_pendingFetchLatitude, _pendingFetchLongitude);
             _lastFetchTileKey = _service.getTileKey(_pendingFetchLatitude, _pendingFetchLongitude);
             System.println("No pubs in tile: " + _service.getLastRequestKey());
         } else {
             _offline = true;
             _fetchErrorCode = result;
             _lastFetchRootKey = PubService.getRootKey(_pendingFetchLatitude, _pendingFetchLongitude);
+            _lastFetchPrefixPath = PubService.getIndexPrefixPath(_pendingFetchLatitude, _pendingFetchLongitude);
             _lastFetchTileKey = _service.getTileKey(_pendingFetchLatitude, _pendingFetchLongitude);
             System.println("Pub fetch failed: " + _service.getLastRequestKey() + " code " + result.toString());
         }
@@ -281,13 +285,16 @@ class PubCompassApp extends Application.AppBase {
         _pendingFetchLatitude = _latitude;
         _pendingFetchLongitude = _longitude;
         _lastFetchRootKey = PubService.getRootKey(_pendingFetchLatitude, _pendingFetchLongitude);
+        _lastFetchPrefixPath = PubService.getIndexPrefixPath(_pendingFetchLatitude, _pendingFetchLongitude);
         _service.fetch(_latitude, _longitude, method(:onFetchComplete));
         WatchUi.requestUpdate();
     }
 
     private function shouldRefetch() as Boolean {
         var rootKey = PubService.getRootKey(_latitude, _longitude);
-        if (_lastFetchRootKey == null || rootKey != _lastFetchRootKey) {
+        var prefixPath = PubService.getIndexPrefixPath(_latitude, _longitude);
+        if (_lastFetchRootKey == null || rootKey != _lastFetchRootKey ||
+            _lastFetchPrefixPath == null || prefixPath != _lastFetchPrefixPath) {
             return true;
         }
         var tileKey = _service.getTileKey(_latitude, _longitude);
