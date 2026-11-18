@@ -1,0 +1,10 @@
+/bin/*
+!/bin/pubcompass.prg
+!/bin/pubcompass.iq
+/site/
+/.venv/
+__pycache__/
+*.py[cod]
+/united-kingdom-latest.osm.pbf
+/pubs.osm.pbf
+/pubs.geojson
