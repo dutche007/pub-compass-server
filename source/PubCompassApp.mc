@@ -1,4 +1,5 @@
 import Toybox.Application;
+import Toybox.Communications;
 import Toybox.Lang;
 import Toybox.Position;
 import Toybox.Sensor;
@@ -156,6 +157,9 @@ class PubCompassApp extends Application.AppBase {
     public function getFetchErrorDetail() as String {
         if (_fetchErrorCode == null) {
             return "Unknown error";
+        }
+        if (_fetchErrorCode == Communications.INVALID_HTTP_BODY_IN_NETWORK_RESPONSE) {
+            return _service.getLastRequestType() + " JSON -400";
         }
         return PubService.getErrorDetail(_fetchErrorCode as Number);
     }

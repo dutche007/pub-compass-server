@@ -120,6 +120,10 @@ class PubService {
         return _lastRequestKey;
     }
 
+    public function getLastRequestType() as String {
+        return _loadingIndex ? "Index" : "Tile";
+    }
+
     public function getTileKey(latitude as Float, longitude as Float) as String? {
         var root = getRootKey(latitude, longitude);
         if (_indexRoot == null || _indexRoot != root ||
@@ -219,7 +223,10 @@ class PubService {
     }
 
     private function requestUrl(url as String) as Void {
-        Communications.makeWebRequest(url, null, {}, method(:onResponse));
+        var options = {
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+        };
+        Communications.makeWebRequest(url, null, options, method(:onResponse));
     }
 
     public function onResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
