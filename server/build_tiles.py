@@ -271,19 +271,24 @@ class TileBuilder:
 
         for key, indices in self._leaf_pubs.items():
             root, path = key.split("/", 1)
-            filename = f"p{path}.json" if path else "root.json"
+            filename = f"p{path}.txt" if path else "root.txt"
             tile_path = tiles_dir / root / filename
             tile_path.parent.mkdir(parents=True, exist_ok=True)
-            payload = {
-                "v": 1,
-                "built": self.built,
-                "p": [[self.pubs[i]["name"], self.pubs[i]["lat"], self.pubs[i]["lon"], self.pubs[i]["hours"]] for i in indices],
-            }
-            encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-            tile_path.write_bytes(encoded)
+            lines = ["T1", self.built, str(len(indices))]
+            for index in indices:
+                pub = self.pubs[index]
+                fields = [
+                    self._safe_text(pub["name"]),
+                    str(round(pub["lat"] * 10_000_000)),
+                    str(round(pub["lon"] * 10_000_000)),
+                    self._safe_text(pub["hours"]),
+                ]
+                lines.append("\t".join(fields))
+            tile_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            encoded_size = tile_path.stat().st_size
             self.tile_count += 1
-            self.total_tile_size += len(encoded)
-            self.largest_tile_size = max(self.largest_tile_size, len(encoded))
+            self.total_tile_size += encoded_size
+            self.largest_tile_size = max(self.largest_tile_size, encoded_size)
 
         self._write_site_index()
         self.validate_random_points()
@@ -303,11 +308,17 @@ class TileBuilder:
                     )
 
         for (root, prefix), split_paths in index_groups.items():
-            path = index_dir / root / f"{prefix}.json"
+            path = index_dir / root / f"{prefix}.txt"
             path.parent.mkdir(parents=True, exist_ok=True)
-            payload = json.dumps({"v": 1, "s": sorted(split_paths)}, separators=(",", ":"))
-            path.write_text(payload, encoding="utf-8")
+            lines = ["I1", str(len(split_paths)), *sorted(split_paths)]
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
             self.index_count += 1
+
+    @staticmethod
+    def _safe_text(value: str | None) -> str:
+        if value is None:
+            return ""
+        return value.replace("\t", " ").replace("\r", " ").replace("\n", " ")
 
     def _leaf_for(self, latitude: float, longitude: float) -> list[int] | None:
         root = self.root_key(latitude, longitude)
@@ -393,15 +404,15 @@ class TileBuilder:
     def print_stats(self) -> None:
         site_size = sum(path.stat().st_size for path in self.output.rglob("*") if path.is_file())
         index_sizes = [
-            path.stat().st_size for path in (self.output / "index").rglob("*.json")
+            path.stat().st_size for path in (self.output / "index").rglob("*.txt")
         ]
-        tile_count = sum(1 for path in (self.output / "tiles").rglob("*.json"))
+        tile_count = sum(1 for path in (self.output / "tiles").rglob("*.txt"))
         print(f"Pub records after deduplication: {len(self.pubs)}")
         print(f"Tile count: {tile_count}")
         print(f"Index count: {self.index_count}")
         print(f"Largest index: {max(index_sizes, default=0)} bytes")
         print(f"Largest tile: {self.largest_tile_size} bytes")
-        print(f"Total tile JSON size: {self.total_tile_size} bytes")
+        print(f"Total tile data size: {self.total_tile_size} bytes")
         print(f"Total site size: {site_size} bytes")
         if site_size > WARN_SITE_SIZE:
             print(f"Warning: site is larger than the 500 MB target ({site_size} bytes).")

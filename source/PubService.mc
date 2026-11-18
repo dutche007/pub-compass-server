@@ -194,10 +194,10 @@ class PubService {
 
     public static function getErrorDetail(error as Number) as String {
         if (error == RESULT_INVALID_RESPONSE) {
-            return "Invalid tile JSON";
+            return "Invalid tile data";
         }
         if (error == Communications.INVALID_HTTP_BODY_IN_NETWORK_RESPONSE) {
-            return "JSON error -400";
+            return "Text error -400";
         }
         if (error == Communications.NETWORK_REQUEST_TIMED_OUT) {
             return "Timeout -300";
@@ -210,21 +210,21 @@ class PubService {
 
     private function requestIndex() as Void {
         _loadingIndex = true;
-        _lastRequestKey = "index/" + _rootKey + "/" + _prefixPath + ".json";
+        _lastRequestKey = "index/" + _rootKey + "/" + _prefixPath + ".txt";
         requestUrl(PAGES_BASE_URL + _lastRequestKey);
     }
 
     private function requestTile() as Void {
         _loadingIndex = false;
         var path = resolvePath(_latitude, _longitude);
-        var filename = path.length() == 0 ? "root.json" : "p" + path + ".json";
+        var filename = path.length() == 0 ? "root.txt" : "p" + path + ".txt";
         _lastRequestKey = "tiles/" + _rootKey + "/" + filename;
         requestUrl(PAGES_BASE_URL + _lastRequestKey);
     }
 
     private function requestUrl(url as String) as Void {
         var options = {
-            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_TEXT_PLAIN
         };
         Communications.makeWebRequest(url, null, options, method(:onResponse));
     }
@@ -254,13 +254,13 @@ class PubService {
             finish(null, responseCode);
             return;
         }
-        if (!(data instanceof Dictionary)) {
+        if (!(data instanceof String)) {
             finish(null, RESULT_INVALID_RESPONSE);
             return;
         }
 
         if (_loadingIndex) {
-            if (!parseIndex(data)) {
+            if (!parseIndex(data as String)) {
                 finish(null, RESULT_INVALID_RESPONSE);
                 return;
             }
@@ -270,7 +270,7 @@ class PubService {
             return;
         }
 
-        var pubs = parseTile(data);
+        var pubs = parseTile(data as String);
         if (pubs == null) {
             finish(null, RESULT_INVALID_RESPONSE);
             return;
@@ -278,21 +278,18 @@ class PubService {
         finish(pubs, RESULT_OK);
     }
 
-    private function parseIndex(data as Dictionary) as Boolean {
-        if (data["v"] != 1) {
+    private function parseIndex(data as String) as Boolean {
+        var lines = splitText(data, "\n");
+        if (lines.size() < 2 || lines[0] != "I1") {
             return false;
         }
-        var splitValue = data["s"];
-        if (!(splitValue instanceof Array)) {
+        var splitCount = lines[1].toNumber();
+        if (splitCount == null || splitCount < 0 || lines.size() < splitCount + 2) {
             return false;
         }
         var splitPaths = [];
-        for (var index = 0; index < splitValue.size(); index++) {
-            var value = splitValue[index];
-            if (!(value instanceof String)) {
-                return false;
-            }
-            splitPaths.add(value as String);
+        for (var index = 0; index < splitCount; index++) {
+            splitPaths.add(lines[index + 2]);
         }
         _splitPaths = splitPaths;
         return true;
@@ -365,37 +362,48 @@ class PubService {
         return path;
     }
 
-    private function parseTile(data as Dictionary) as Array<PubRecord>? {
-        if (data["v"] != 1) {
+    private function parseTile(data as String) as Array<PubRecord>? {
+        var lines = splitText(data, "\n");
+        if (lines.size() < 3 || lines[0] != "T1") {
             return null;
         }
-        var values = data["p"];
-        if (!(values instanceof Array) || values.size() > 40) {
+        var pubCount = lines[2].toNumber();
+        if (pubCount == null || pubCount < 0 || pubCount > 40 ||
+            lines.size() < pubCount + 3) {
             return null;
         }
 
         var pubs = [];
-        for (var index = 0; index < values.size(); index++) {
-            var value = values[index];
-            if (!(value instanceof Array) || value.size() != 4) {
+        for (var index = 0; index < pubCount; index++) {
+            var fields = splitText(lines[index + 3], "\t");
+            if (fields.size() != 4) {
                 return null;
             }
-            var nameValue = value[0];
-            var latitudeValue = value[1];
-            var longitudeValue = value[2];
-            var hoursValue = value[3];
-            if ((nameValue != null && !(nameValue instanceof String)) ||
-                latitudeValue == null || longitudeValue == null ||
-                (hoursValue != null && !(hoursValue instanceof String))) {
+            var latitudeValue = fields[1].toNumber();
+            var longitudeValue = fields[2].toNumber();
+            if (latitudeValue == null || longitudeValue == null) {
                 return null;
             }
-            var name = nameValue as String?;
-            var latitude = latitudeValue as Float;
-            var longitude = longitudeValue as Float;
-            var hours = hoursValue as String?;
+            var name = fields[0].length() == 0 ? null : fields[0];
+            var latitude = (latitudeValue as Float) / 10000000.0;
+            var longitude = (longitudeValue as Float) / 10000000.0;
+            var hours = fields[3].length() == 0 ? null : fields[3];
             pubs.add(new PubRecord(name, latitude, longitude, hours));
         }
         return pubs;
+    }
+
+    private function splitText(value as String, delimiter as String) as Array<String> {
+        var parts = [];
+        var partStart = 0;
+        for (var index = 0; index < value.length(); index++) {
+            if (value.substring(index, index + 1) == delimiter) {
+                parts.add(value.substring(partStart, index) as String);
+                partStart = index + 1;
+            }
+        }
+        parts.add(value.substring(partStart, value.length()) as String);
+        return parts;
     }
 
     public function retryAfterBackoff() as Void {

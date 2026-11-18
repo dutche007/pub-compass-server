@@ -1,4 +1,3 @@
-import json
 import sys
 import tempfile
 import unittest
@@ -93,13 +92,13 @@ class TileBuilderTests(unittest.TestCase):
             )
             builder.build()
             prefix = builder.prefix_path(52.05, 1.15)
-            index_path = output / "index" / "52_1" / f"{prefix}.json"
-            index = json.loads(index_path.read_text(encoding="utf-8"))
-            tile = json.loads((output / "tiles" / "52_1" / f"p{prefix}.json").read_text(encoding="utf-8"))
-            self.assertEqual(index, {"v": 1, "s": []})
-            self.assertEqual(tile["v"], 1)
-            self.assertEqual(tile["built"], "2026-11-18")
-            self.assertEqual(len(tile["p"]), 12)
+            index_path = output / "index" / "52_1" / f"{prefix}.txt"
+            index = index_path.read_text(encoding="utf-8").splitlines()
+            tile = (output / "tiles" / "52_1" / f"p{prefix}.txt").read_text(encoding="utf-8").splitlines()
+            self.assertEqual(index[:2], ["I1", "0"])
+            self.assertEqual(tile[:3], ["T1", "2026-11-18", "12"])
+            self.assertEqual(len(tile[3:]), 12)
+            self.assertEqual(tile[3].split("\t"), ["Pub 0", "520500000", "11500000", ""])
             self.assertLess(index_path.stat().st_size, 100)
 
     def test_dense_cell_index_contains_only_relative_splits(self):
@@ -123,9 +122,10 @@ class TileBuilderTests(unittest.TestCase):
             index_dir = output / "index"
             index_dir.mkdir()
             builder._write_indexes(index_dir)
-            index_path = output / "index" / "52_1" / f"{prefix}.json"
-            index = json.loads(index_path.read_text(encoding="utf-8"))
-            self.assertEqual(index["s"], ["", "2", "23"])
+            index_path = output / "index" / "52_1" / f"{prefix}.txt"
+            index = index_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(index[:2], ["I1", "3"])
+            self.assertEqual(index[2:5], ["", "2", "23"])
             self.assertLess(index_path.stat().st_size, 2000)
 
 
