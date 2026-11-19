@@ -197,7 +197,7 @@ class PubService {
             return "Invalid tile data";
         }
         if (error == Communications.INVALID_HTTP_BODY_IN_NETWORK_RESPONSE) {
-            return "Text error -400";
+            return "Data error -400";
         }
         if (error == Communications.NETWORK_REQUEST_TIMED_OUT) {
             return "Timeout -300";
@@ -210,26 +210,26 @@ class PubService {
 
     private function requestIndex() as Void {
         _loadingIndex = true;
-        _lastRequestKey = "index/" + _rootKey + "/" + _prefixPath + ".txt";
+        _lastRequestKey = "index/" + _rootKey + "/" + _prefixPath + ".bin";
         requestUrl(PAGES_BASE_URL + _lastRequestKey);
     }
 
     private function requestTile() as Void {
         _loadingIndex = false;
         var path = resolvePath(_latitude, _longitude);
-        var filename = path.length() == 0 ? "root.txt" : "p" + path + ".txt";
+        var filename = path.length() == 0 ? "root.bin" : "p" + path + ".bin";
         _lastRequestKey = "tiles/" + _rootKey + "/" + filename;
         requestUrl(PAGES_BASE_URL + _lastRequestKey);
     }
 
     private function requestUrl(url as String) as Void {
         var options = {
-            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_TEXT_PLAIN
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_OCTET_STREAM
         };
         Communications.makeWebRequest(url, null, options, method(:onResponse));
     }
 
-    public function onResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
+    public function onResponse(responseCode as Number, data as Dictionary or String or ByteArray or Null) as Void {
         if (!_busy) {
             return;
         }
@@ -254,13 +254,18 @@ class PubService {
             finish(null, responseCode);
             return;
         }
-        if (!(data instanceof String)) {
+        var textData = "";
+        if (data instanceof ByteArray) {
+            textData = (data as ByteArray).toString();
+        } else if (data instanceof String) {
+            textData = data as String;
+        } else {
             finish(null, RESULT_INVALID_RESPONSE);
             return;
         }
 
         if (_loadingIndex) {
-            if (!parseIndex(data as String)) {
+            if (!parseIndex(textData)) {
                 finish(null, RESULT_INVALID_RESPONSE);
                 return;
             }
@@ -270,7 +275,7 @@ class PubService {
             return;
         }
 
-        var pubs = parseTile(data as String);
+        var pubs = parseTile(textData);
         if (pubs == null) {
             finish(null, RESULT_INVALID_RESPONSE);
             return;

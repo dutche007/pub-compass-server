@@ -271,7 +271,7 @@ class TileBuilder:
 
         for key, indices in self._leaf_pubs.items():
             root, path = key.split("/", 1)
-            filename = f"p{path}.txt" if path else "root.txt"
+            filename = f"p{path}.bin" if path else "root.bin"
             tile_path = tiles_dir / root / filename
             tile_path.parent.mkdir(parents=True, exist_ok=True)
             lines = ["T1", self.built, str(len(indices))]
@@ -284,8 +284,9 @@ class TileBuilder:
                     self._safe_text(pub["hours"]),
                 ]
                 lines.append("\t".join(fields))
-            tile_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            encoded_size = tile_path.stat().st_size
+            encoded = ("\n".join(lines) + "\n").encode("utf-8")
+            tile_path.write_bytes(encoded)
+            encoded_size = len(encoded)
             self.tile_count += 1
             self.total_tile_size += encoded_size
             self.largest_tile_size = max(self.largest_tile_size, encoded_size)
@@ -308,10 +309,10 @@ class TileBuilder:
                     )
 
         for (root, prefix), split_paths in index_groups.items():
-            path = index_dir / root / f"{prefix}.txt"
+            path = index_dir / root / f"{prefix}.bin"
             path.parent.mkdir(parents=True, exist_ok=True)
             lines = ["I1", str(len(split_paths)), *sorted(split_paths)]
-            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
             self.index_count += 1
 
     @staticmethod
@@ -404,9 +405,9 @@ class TileBuilder:
     def print_stats(self) -> None:
         site_size = sum(path.stat().st_size for path in self.output.rglob("*") if path.is_file())
         index_sizes = [
-            path.stat().st_size for path in (self.output / "index").rglob("*.txt")
+            path.stat().st_size for path in (self.output / "index").rglob("*.bin")
         ]
-        tile_count = sum(1 for path in (self.output / "tiles").rglob("*.txt"))
+        tile_count = sum(1 for path in (self.output / "tiles").rglob("*.bin"))
         print(f"Pub records after deduplication: {len(self.pubs)}")
         print(f"Tile count: {tile_count}")
         print(f"Index count: {self.index_count}")

@@ -1,6 +1,6 @@
 # Pub Compass static UK snapshot
 
-This repository component builds a frozen pub dataset from a Geofabrik OpenStreetMap extract and publishes plain-text files with GitHub Pages. Requests are static-file GETs only; there are no live Overpass or other upstream queries.
+This repository component builds a frozen pub dataset from a Geofabrik OpenStreetMap extract and publishes versioned UTF-8 data files with GitHub Pages. Requests are static-file GETs only; there are no live Overpass or other upstream queries.
 
 ## Snapshot source and coverage
 
@@ -16,11 +16,11 @@ The UK is partitioned into one-degree root squares. The root key is:
 floor(latitude)_floor(longitude)
 ```
 
-For example, `51_-1` covers latitude 51..52 and longitude -1..0. Each root is first divided uniformly into 1/8-degree cells using three quadtree levels. The watch derives this three-digit cell prefix from latitude/longitude and requests `index/51_-1/<prefix>.txt`. This keeps dense-city indexes small. The cell index contains only further split paths, relative to that prefix. At each split, the four children are ordered south-west `0`, south-east `1`, north-west `2`, north-east `3`. The watch follows the path for its coordinate and requests `tiles/51_-1/p<full-path>.txt`. It retains the current cell index in memory and requests another when crossing into a different 1/8-degree cell.
+For example, `51_-1` covers latitude 51..52 and longitude -1..0. Each root is first divided uniformly into 1/8-degree cells using three quadtree levels. The watch derives this three-digit cell prefix from latitude/longitude and requests `index/51_-1/<prefix>.bin`. This keeps dense-city indexes small. The cell index contains only further split paths, relative to that prefix. At each split, the four children are ordered south-west `0`, south-east `1`, north-west `2`, north-east `3`. The watch follows the path for its coordinate and requests `tiles/51_-1/p<full-path>.bin`. It retains the current cell index in memory and requests another when crossing into a different 1/8-degree cell.
 
 The builder calculates the tenth-nearest radius from each tile centre and includes every pub within that radius plus twice the maximum centre-to-corner distance. This triangle-inequality bound ensures each point in the tile has its true nearest ten among the tile's candidates. If a candidate list exceeds 40, it recursively splits the tile. A tile that still exceeds the cap at the maximum depth fails the build instead of silently returning incomplete data. Areas with no pub within about 30 km have no leaf file and return HTTP 404.
 
-Each index is UTF-8 plain text: `I1`, the number of split paths, then one relative path per line. Each tile is UTF-8 plain text: `T1`, the snapshot date, the number of pubs, then one tab-separated record per pub (`name`, latitude and longitude scaled by 10,000,000, and raw opening hours). Empty name or hours fields represent null. Tabs and line breaks in text fields are replaced with spaces so records remain unambiguous. Plain text is a compatibility workaround being tested for the Garmin phone bridge's `INVALID_HTTP_BODY_IN_NETWORK_RESPONSE` error on the valid JSON responses.
+Each `.bin` file contains UTF-8 text requested as `application/octet-stream`, avoiding the MIME parameters Pages adds to text responses. The index contains `I1`, the number of split paths, then one relative path per line. A tile contains `T1`, the snapshot date, the number of pubs, then one tab-separated record per pub (`name`, latitude and longitude scaled by 10,000,000, and raw opening hours). Empty name or hours fields represent null. Tabs and line breaks in text fields are replaced with spaces so records remain unambiguous. The watch converts the returned byte array to a string before parsing.
 
 Example tile (`<TAB>` marks a literal tab; empty name and hours fields are blank):
 
@@ -32,7 +32,7 @@ The Red Lion<TAB>515000000<TAB>-1000000<TAB>Mo-Su 11:00-23:00
 <TAB>515100000<TAB>-1100000<TAB>
 ```
 
-The watch fetches the cell index and current data tile; after that, crossing a leaf boundary inside the same cell requires only the new tile GET.
+The watch fetches the cell index and current data tile; after that, crossing a leaf boundary inside the same cell requires only the new tile GET. Confirm that GitHub Pages serves the `.bin` files as `application/octet-stream` after each format change.
 
 ## Build and verification
 

@@ -159,7 +159,7 @@ class PubCompassApp extends Application.AppBase {
             return "Unknown error";
         }
         if (_fetchErrorCode == Communications.INVALID_HTTP_BODY_IN_NETWORK_RESPONSE) {
-            return _service.getLastRequestType() + " text -400";
+            return _service.getLastRequestType() + " data -400";
         }
         return PubService.getErrorDetail(_fetchErrorCode as Number);
     }

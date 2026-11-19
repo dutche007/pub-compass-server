@@ -92,9 +92,9 @@ class TileBuilderTests(unittest.TestCase):
             )
             builder.build()
             prefix = builder.prefix_path(52.05, 1.15)
-            index_path = output / "index" / "52_1" / f"{prefix}.txt"
-            index = index_path.read_text(encoding="utf-8").splitlines()
-            tile = (output / "tiles" / "52_1" / f"p{prefix}.txt").read_text(encoding="utf-8").splitlines()
+            index_path = output / "index" / "52_1" / f"{prefix}.bin"
+            index = index_path.read_bytes().decode("utf-8").splitlines()
+            tile = (output / "tiles" / "52_1" / f"p{prefix}.bin").read_bytes().decode("utf-8").splitlines()
             self.assertEqual(index[:2], ["I1", "0"])
             self.assertEqual(tile[:3], ["T1", "2026-11-18", "12"])
             self.assertEqual(len(tile[3:]), 12)
@@ -122,8 +122,8 @@ class TileBuilderTests(unittest.TestCase):
             index_dir = output / "index"
             index_dir.mkdir()
             builder._write_indexes(index_dir)
-            index_path = output / "index" / "52_1" / f"{prefix}.txt"
-            index = index_path.read_text(encoding="utf-8").splitlines()
+            index_path = output / "index" / "52_1" / f"{prefix}.bin"
+            index = index_path.read_bytes().decode("utf-8").splitlines()
             self.assertEqual(index[:2], ["I1", "3"])
             self.assertEqual(index[2:5], ["", "2", "23"])
             self.assertLess(index_path.stat().st_size, 2000)
